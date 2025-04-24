@@ -1,5 +1,7 @@
 import os
 import logging
+import random
+from datetime import datetime
 from typing import TypedDict, Optional
 
 from dotenv import load_dotenv
@@ -31,6 +33,24 @@ model = genai.GenerativeModel("models/gemini-1.5-flash")
 # ---- MEMORY STATE ---- #
 memory = {}
 
+# ---- DYNAMIC FLAVOR GENERATOR ---- #
+def generate_prompt_flavor():
+    moods = ["gentle", "hopeful", "tender", "comforting", "reassuring", "sincere", "soft-spoken"]
+    metaphors = [
+        "like sunrise breaking through clouds",
+        "like rain falling gently on dry land",
+        "like a friend sitting silently beside you",
+        "like warm hands around a cold heart",
+        "like whispers of hope in a storm"
+    ]
+    emotion_frame = [
+        "Speak as someone who has felt this pain too.",
+        "Talk as if you're wrapping the person in a warm blanket of peace.",
+        "Speak to their heart as a soul who cares deeply.",
+        "Use words that feel like a calm sea after waves of distress."
+    ]
+    return f"{random.choice(moods).capitalize()} tone, {random.choice(metaphors)}, {random.choice(emotion_frame)}"
+
 # ---- EMOTION DETECTION NODE ---- #
 def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
@@ -51,7 +71,6 @@ Just return the one word.
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
 
-    # Send prompt to Gemini to generate short, authentic dua
     prompt = f"""
 Provide a short and authentic Islamic dua with proper diacritics (Arabic + English translation) for someone feeling {emotion}.
 Keep the dua brief and concise, ensuring the translation is clear and meaningful.
@@ -73,25 +92,27 @@ def generate_counseling(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
     user_msg = state["message"]
 
-    # Updated prompt incorporating Ayah and Hadith context without direct references
+    tone_instruction = generate_prompt_flavor()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     prompt = f"""
-You're an Islamic therapist named Noor. Your goal is to provide comfort and guidance with empathy and simple, natural language. Please respond with love and wisdom, drawing from Islamic teachings, but without directly quoting references. You should also incorporate CBT techniques that are compassionate and realistic, and keep the tone calm and reassuring.
+You're an Islamic therapist named Noor. Respond as a compassionate friend blending Islamic wisdom with CBT coping skills.
+Avoid references. Use context from Ayah/Hadith naturally. Make it feel like a warm, real conversation.
 
 User: {name}
 Emotion: {emotion}
 Message: \"{user_msg}\"
+Tone: {tone_instruction}
+Time: {timestamp}
 
-For each emotional state, respond in the following ways:
-- **Sadness**: Remind the user that every hardship is followed by ease. Allah has promised that after difficult times, relief will come. Even in sadness, there is a hidden wisdom that will unfold in due time. Help them remember that Allah's mercy is vast, and their pain is temporary. Encourage them to reflect on times when Allah's mercy eased their burdens in the past.
-- **Anxiety**: Gently encourage them to trust that Allah has control over everything, and worrying about the future doesn't change its outcome. Remind them that Allah is always near and hears their silent thoughts. Encourage them to focus on the present moment, just as it’s taught to "take things one step at a time" and leave the unknown to Allah’s plan. Guide them to breathe deeply and center themselves in the present.
-- **Loneliness**: Let them know that while human companionship is a blessing, the closeness of Allah is a true source of solace. Allah is always with them, closer than their jugular vein, and He hears every prayer and supplication. Encourage them to seek Allah’s companionship through prayer and remembrance, especially when they feel isolated. Remind them that even in their loneliness, Allah’s presence never leaves them.
-- **Anger**: Acknowledge that anger is a natural emotion, but it's essential to respond with patience and forgiveness. Remember that Allah loves those who control their anger and forgive others. Encourage them to pause, breathe, and let go of the feeling of anger before it leads to regret. Help them reframe the situation by considering what might have triggered their anger and whether there is another way to look at it. Advise them to focus on patience, as it leads to peace of mind.
+Guide for emotional response:
+- Sad: Remind them that after hardship comes ease. Comfort them like light returns after darkness.
+- Anxious: Encourage them to trust Allah’s plan. Help them ground in present.
+- Lonely: Remind them Allah is closer than they think. They're never truly alone.
+- Angry: Encourage calm, reframing, forgiveness. Point to the power in restraint.
+- Others: Respond softly with emotional safety and spiritual insight.
 
-The response should be:
-- Empathetic and calming, keeping it short and sweet, not long or overwhelming.
-- Gentle, warm, and human-like, just like a friend giving advice.
-- Incorporate Islamic teachings naturally, without quoting specific verses or Hadith but maintaining the essence of comfort and guidance.
-- Include simple CBT techniques, such as reframing negative thoughts, grounding in the present moment, and using self-compassion.
+Keep it short, empathetic, and human.
 """
     reply = model.generate_content(prompt).text.strip()
     state["response"] = reply
@@ -101,25 +122,22 @@ The response should be:
 # ---- USER MEMORY NODE ---- #
 def set_user_memory(state: TherapyState) -> TherapyState:
     uid = state["user_id"]
-    
-    # If the user is returning, greet them with their name and mood
+
     if uid in memory:
         user_name = memory[uid].get("name", "Friend")
         user_mood = memory[uid].get("mood", "neutral")
         logging.info(f"Welcome back, {user_name}! Your current mood is {user_mood}.")
     else:
-        logging.info(f"New user. Welcome!")
+        logging.info("New user. Welcome!")
 
-    # Update or set the name if the user provides it
     if "name" in state:
         memory[uid] = memory.get(uid, {})
         memory[uid]["name"] = state["name"]
 
-    # Update or set the mood if the user mentions it
     if "emotion" in state:
         memory[uid] = memory.get(uid, {})
         memory[uid]["mood"] = state["emotion"]
-    
+
     state["name"] = memory[uid].get("name", "Friend")
     state["emotion"] = memory[uid].get("mood", "neutral")
     return state
@@ -138,4 +156,4 @@ graph.add_edge("detect_emotion", "get_dua")
 graph.add_edge("get_dua", "generate_reply")
 graph.set_finish_point("generate_reply")
 
-langgraph_app = graph.compile() 
+langgraph_app = graph.compile()
