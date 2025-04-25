@@ -142,6 +142,10 @@ def set_user_memory(state: TherapyState) -> TherapyState:
     state["emotion"] = memory[uid].get("mood", "neutral")
     return state
 
+# ---- ROUTER & FLOW ---- #
+def route_followup(state: TherapyState) -> str:
+    return "followup" if state.get("is_followup") else "new_session"
+
 # ---- LANGGRAPH BUILD ---- #
 graph = StateGraph(TherapyState)
 
