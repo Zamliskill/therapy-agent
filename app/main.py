@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.therapy_agent import langgraph_app
 
@@ -17,9 +18,12 @@ def chat(data: UserMessage):
         "message": data.message
     }
     result = langgraph_app.invoke(state)
-    return {
-        "name": result["name"],
-        "emotion": result["emotion"],
-        "dua": result["dua"],
-        "message": result["response"]
-    }
+    return JSONResponse(
+        content={
+            "name": result["name"],
+            "emotion": result["emotion"],
+            "dua": result["dua"],
+            "message": result["response"]
+        },
+        media_type="application/json; charset=utf-8"  # <-- Force UTF-8 here
+    )
