@@ -69,7 +69,6 @@ def generate_prompt_flavor():
     ]
     return f"{random.choice(moods).capitalize()} tone, {random.choice(metaphors)}, {random.choice(emotion_frame)}"
 
-
 # --- FALLBACK DUAS --- #
 FALLBACK_DUAS = [
     {
@@ -229,28 +228,25 @@ DUA_DATASET = {
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state.get("emotion")
 
-    
-    if emotion in ["none", "neutral"]:
-        state["dua"] = None
-        return state
-
+    # Check if emotion exists in DUA_DATASET
     if emotion in DUA_DATASET:
+        # Pick a random dua from the list for that emotion
         selected_dua = random.choice(DUA_DATASET[emotion])
         dua_text = f"Arabic: {selected_dua['arabic']}\nTranslation: {selected_dua['translation']}"
         state["dua"] = dua_text
+        logging.info(f"Dua: {dua_text}")
         return state
 
+    # If emotion not found, fallback to generic duas
     selected_dua = random.choice(FALLBACK_DUAS)
     dua_text = f"Arabic: {selected_dua['arabic']}\nTranslation: {selected_dua['translation']}"
     state["dua"] = dua_text
+    logging.info(f"Fallback Dua: {dua_text}")
     return state
-
-
 
 
 # --- COUNSELOR RESPONSE NODE --- #
 def generate_counseling(state: TherapyState) -> TherapyState:
-
     name = state.get("name", "Friend")
     emotion = state.get("emotion", "neutral")
     user_msg = state["message"]
@@ -265,8 +261,7 @@ You must speak:
 - As a warm, real human counselor.
 - With a tender heart, as if sitting face-to-face with the user.
 - Use Islamic teachings (Quran, Hadith) blended *naturally* without citing references.
-- - If the emotion is sad, anxious, lonely, guilty, hopeless, angry, tired, or empty: end with a heart-touching dua with proper arabic diacritics and translation.
-- If the emotion is neutral, or positive, no need to include any dua. Just talk naturally.
+- Always offer a soothing Dua that fits the user's emotional state (Arabic with diacritics + English translation).
 - Never act like an AI, chatbot, or assistant.
 - Speak slowly, gently, and persuasively, like wrapping the person in a warm embrace.
 
