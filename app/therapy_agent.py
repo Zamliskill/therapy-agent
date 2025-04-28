@@ -1,3 +1,4 @@
+# --- IMPORTS --- #
 import os
 import logging
 import random
@@ -69,30 +70,6 @@ def generate_prompt_flavor():
     ]
     return f"{random.choice(moods).capitalize()} tone, {random.choice(metaphors)}, {random.choice(emotion_frame)}"
 
-# --- FALLBACK DUAS --- #
-FALLBACK_DUAS = [
-    {
-        "arabic": "رَبِّ إِنِّي لِمَا أَنْزَلْتَ إِلَيَّ مِنْ خَيْرٍ فَقِيرٌ",
-        "translation": "My Lord, indeed I am in need of whatever good You would send down to me."
-    },
-    {
-        "arabic": "اللّهُمَّ إِنِّي أَسْأَلُكَ رِضَاكَ وَالجَنَّةَ وَأَعُوذُ بِكَ مِنْ سَخَطِكَ وَالنَّارِ",
-        "translation": "O Allah, I ask You for Your pleasure and Paradise, and I seek refuge in You from Your anger and the Fire."
-    },
-    {
-        "arabic": "اللّهُمَّ لا تَجْعَلْ مُصِيبَتَنَا فِي دِينِنَا",
-        "translation": "O Allah, do not make our affliction in our religion."
-    },
-    {
-        "arabic": "اللّهُمَّ ثَبِّتْ قَلْبِي عَلَى دِينِكَ",
-        "translation": "O Allah, make my heart steadfast upon Your religion."
-    },
-    {
-        "arabic": "رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ",
-        "translation": "Our Lord, give us in this world [that which is] good and in the Hereafter [that which is] good, and protect us from the punishment of the Fire."
-    }
-]
-
 # --- EMOTION DETECTION NODE --- #
 def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
@@ -109,143 +86,29 @@ Just return the one word.
     logging.info(f"Emotion detected: {emotion}")
     return state
 
-
-# --- DUA DATASET --- #
-DUA_DATASET = {
-    "sad": [
-        {
-            "arabic": "اللّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الهَمِّ وَالحَزَنِ",
-            "translation": "O Allah, I seek refuge in You from worry and grief."
-        },
-        {
-            "arabic": "اللّهُمَّ اجْبُرْ كَسْرِي وَارْزُقْنِي الرِّضَا",
-            "translation": "O Allah, mend my brokenness and grant me contentment."
-        },
-        {
-            "arabic": "اللّهُمَّ املأ قلبي سرورًا وأملاً بك",
-            "translation": "O Allah, fill my heart with joy and hope in You."
-        },
-        {
-            "arabic": "اللّهُمَّ إِنِّي أَسْأَلُكَ نَفْسًا مُطْمَئِنَّةً",
-            "translation": "O Allah, I ask You for a soul that is content."
-        },
-        {
-            "arabic": "اللّهُمَّ اجعلني ممن تبشرهم الملائكة: ألا تخافوا ولا تحزنوا",
-            "translation": "O Allah, make me among those whom the angels give glad tidings: 'Do not fear and do not grieve.'"
-        }
-    ],
-    "anxious": [
-        {
-            "arabic": "اللّهُمَّ لاَ سَهْلَ إِلاَّ مَا جَعَلْتَهُ سَهْلاً",
-            "translation": "O Allah, there is no ease except what You make easy."
-        },
-        {
-            "arabic": "اللّهُمَّ اكفني همي وأزل عني كربي",
-            "translation": "O Allah, relieve me of my worry and remove my distress."
-        },
-        {
-            "arabic": "اللّهُمَّ طمئن قلبي بذكرك",
-            "translation": "O Allah, reassure my heart with Your remembrance."
-        },
-        {
-            "arabic": "اللّهُمَّ إني أعوذ بك من الهم والحزن",
-            "translation": "O Allah, I seek refuge in You from anxiety and sorrow."
-        },
-        {
-            "arabic": "اللّهُمَّ اشرح لي صدري ويسر لي أمري",
-            "translation": "O Allah, expand for me my chest and ease for me my task."
-        }
-    ],
-    "hopeless": [
-        {
-            "arabic": "اللّهُمَّ ارزقني حسن الظن بك",
-            "translation": "O Allah, grant me good thoughts about You."
-        },
-        {
-            "arabic": "اللّهُمَّ اجعلني من المتوكلين عليك",
-            "translation": "O Allah, make me among those who rely upon You."
-        },
-        {
-            "arabic": "اللّهُمَّ لا تحرمني خير ما عندك بسوء ما عندي",
-            "translation": "O Allah, do not deprive me of the best of what You have because of the worst of what I have."
-        },
-        {
-            "arabic": "رَبِّ لَا تَذَرْنِي فَرْدًا وَأَنتَ خَيْرُ الْوَارِثِينَ",
-            "translation": "My Lord, do not leave me alone, and You are the best of inheritors."
-        },
-        {
-            "arabic": "اللّهُمَّ اجعل آخر كلامي شهادة أن لا إله إلا الله",
-            "translation": "O Allah, make the last words I speak: There is no god but Allah."
-        }
-    ],
-    "guilty": [
-        {
-            "arabic": "اللّهُمَّ إِنِّي ظَلَمْتُ نَفْسِي ظُلْمًا كَثِيرًا فَاغْفِرْ لِي",
-            "translation": "O Allah, I have greatly wronged myself, so forgive me."
-        },
-        {
-            "arabic": "رَبِّ اغْفِرْ وَارْحَمْ وَأَنتَ خَيْرُ الرَّاحِمِينَ",
-            "translation": "My Lord, forgive and have mercy, and You are the best of the merciful."
-        },
-        {
-            "arabic": "اللّهُمَّ اجعلني من التوابين",
-            "translation": "O Allah, make me among those who repent often."
-        },
-        {
-            "arabic": "اللّهُمَّ طَهِّرْ قلبي من الذنوب والخطايا",
-            "translation": "O Allah, purify my heart from sins and mistakes."
-        },
-        {
-            "arabic": "رَبَّنَا اغْفِرْ لَنَا ذُنُوبَنَا وَكَفِّرْ عَنَّا سَيِّئَاتِنَا",
-            "translation": "Our Lord, forgive us our sins and remove from us our misdeeds."
-        }
-    ],
-    "lonely": [
-        {
-            "arabic": "اللّهُمَّ آنِسْ وَحْشَتِي",
-            "translation": "O Allah, comfort my loneliness."
-        },
-        {
-            "arabic": "اللّهُمَّ اكفني بحلالك عن حرامك وأغنني بفضلك عمن سواك",
-            "translation": "O Allah, suffice me with Your lawful against Your unlawful, and enrich me by Your bounty over all besides You."
-        },
-        {
-            "arabic": "اللّهُمَّ كُنْ مَعِي وَلاَ تَكُنْ عَلَيَّ",
-            "translation": "O Allah, be with me and not against me."
-        },
-        {
-            "arabic": "اللّهُمَّ إني أسألك أنس القلب بقربك",
-            "translation": "O Allah, I ask You for the comfort of the heart through closeness to You."
-        },
-        {
-            "arabic": "اللّهُمَّ املأ قلبي بنورك ورضاك",
-            "translation": "O Allah, fill my heart with Your light and Your pleasure."
-        }
-    ]
-}
-
 # --- DUA FETCH NODE --- #
 def fetch_dua(state: TherapyState) -> TherapyState:
-    emotion = state.get("emotion")
+    emotion = state["emotion"]
 
-    # Check if emotion exists in DUA_DATASET
-    if emotion in DUA_DATASET:
-        # Pick a random dua from the list for that emotion
-        selected_dua = random.choice(DUA_DATASET[emotion])
-        dua_text = f"Arabic: {selected_dua['arabic']}\nTranslation: {selected_dua['translation']}"
-        state["dua"] = dua_text
-        logging.info(f"Dua: {dua_text}")
-        return state
+    prompt = f"""
+Provide a short and authentic Islamic dua with proper diacritics (Arabic + English translation) for someone feeling {emotion}.
+Rules:
+- Dua should be brief, soft, authentic, and fit their emotional need.
+- Arabic with full diacritics (harakāt) + simple English translation.
+Example:
+Arabic: اللّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الهَمِّ وَالحَزَنِ
+Translation: O Allah, I seek refuge in You from anxiety and grief.
 
-    # If emotion not found, fallback to generic duas
-    selected_dua = random.choice(FALLBACK_DUAS)
-    dua_text = f"Arabic: {selected_dua['arabic']}\nTranslation: {selected_dua['translation']}"
-    state["dua"] = dua_text
-    logging.info(f"Fallback Dua: {dua_text}")
+Format:
+Arabic: ...
+Translation: ...
+"""
+    dua = model.generate_content(prompt).text.strip()
+    state["dua"] = dua
+    logging.info(f"Dua provided: {dua}")
     return state
 
-
-# --- COUNSELOR RESPONSE NODE --- #
+# --- COUNSELOR RESPONSE NODE (IMPROVED) --- #
 def generate_counseling(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
     emotion = state.get("emotion", "neutral")
@@ -332,6 +195,7 @@ graph.add_node("generate_reply", generate_counseling)
 graph.set_entry_point("handle_memory")
 graph.add_edge("handle_memory", "detect_emotion")
 
+# CONDITIONAL: Only fetch dua if emotional
 graph.add_conditional_edges(
     "detect_emotion",
     lambda state: "get_dua" if state.get("emotion") in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless"] else "generate_reply"
