@@ -229,7 +229,7 @@ DUA_DATASET = {
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state.get("emotion")
 
-    # 🛑 NEW ADDITION: If emotion is none/neutral/happy, no dua needed
+    
     if emotion in ["none", "neutral"]:
         state["dua"] = None
         return state
@@ -250,7 +250,6 @@ def fetch_dua(state: TherapyState) -> TherapyState:
 
 # --- COUNSELOR RESPONSE NODE --- #
 def generate_counseling(state: TherapyState) -> TherapyState:
-    include_dua = bool(state.get("dua"))
 
     name = state.get("name", "Friend")
     emotion = state.get("emotion", "neutral")
