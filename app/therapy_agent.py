@@ -229,31 +229,29 @@ DUA_DATASET = {
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state.get("emotion")
 
-    # If the emotion is neutral or positive, no dua is needed
-    if emotion in ["happy", "neutral", "none"]:
+    # 🛑 NEW ADDITION: If emotion is none/neutral/happy, no dua needed
+    if emotion in ["none", "neutral"]:
         state["dua"] = None
-        logging.info("No dua needed for positive or neutral emotion.")
         return state
 
-    # Check if emotion exists in DUA_DATASET
     if emotion in DUA_DATASET:
         selected_dua = random.choice(DUA_DATASET[emotion])
         dua_text = f"Arabic: {selected_dua['arabic']}\nTranslation: {selected_dua['translation']}"
         state["dua"] = dua_text
-        logging.info(f"Dua: {dua_text}")
         return state
 
-    # If emotion not found, fallback to generic duas
     selected_dua = random.choice(FALLBACK_DUAS)
     dua_text = f"Arabic: {selected_dua['arabic']}\nTranslation: {selected_dua['translation']}"
     state["dua"] = dua_text
-    logging.info(f"Fallback Dua: {dua_text}")
     return state
+
 
 
 
 # --- COUNSELOR RESPONSE NODE --- #
 def generate_counseling(state: TherapyState) -> TherapyState:
+    include_dua = bool(state.get("dua"))
+
     name = state.get("name", "Friend")
     emotion = state.get("emotion", "neutral")
     user_msg = state["message"]
@@ -269,7 +267,7 @@ You must speak:
 - With a tender heart, as if sitting face-to-face with the user.
 - Use Islamic teachings (Quran, Hadith) blended *naturally* without citing references.
 - - If the emotion is sad, anxious, lonely, guilty, hopeless, angry, tired, or empty: end with a heart-touching dua with proper arabic diacritics and translation.
-- If the emotion is happy, neutral, or positive, no need to include any dua. Just talk naturally.
+- If the emotion is neutral, or positive, no need to include any dua. Just talk naturally.
 - Never act like an AI, chatbot, or assistant.
 - Speak slowly, gently, and persuasively, like wrapping the person in a warm embrace.
 
