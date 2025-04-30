@@ -81,22 +81,32 @@ def route_based_on_emotion(state: TherapyState) -> str:
 
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
+    user_msg = state["message"]
     prompt = f"""
-Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
-Give a short authentic dua (Arabic with diacritics + translation) for someone feeling {emotion}.
+User message: "{user_msg}"
+
+Based on this message, detect language — if it's in English or Roman Urdu, respond accordingly.
+
+Then return ONLY a short **authentic** Islamic dua appropriate for someone feeling **{emotion}**, with the following format:
+
+Arabic: [Dua in Arabic WITH full diacritics]
+Translation: [Translation in same language as user message]
+
 Rules:
-1. Arabic with diacritics.
-2. Authentic only — from Quran, Hadith, or Seerah.
-3. No fabricated or generic made-up duas.
-4. Do NOT explain the dua. Just output:
+- Arabic must include full diacritics (Tashkeel).
+- Translation should match user message language (English or Roman Urdu).
+- Only authentic duas from Quran or Sahih Hadith or from seerah or Islamic history or teachings.
+- Do not fabricate or invent supplications.
+- Do NOT explain anything. Just strictly follow this format:
 
 Arabic: ...
 Translation: ...
 """
-    dua = model.generate_content(prompt).text.strip()
-    state["dua"] = dua
-    logging.info(f"Dua generated: {dua}")
+    result = model.generate_content(prompt).text.strip()
+    state["dua"] = result
+    logging.info(f"Dua generated: {result}")
     return state
+
 
 def generate_counseling(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
@@ -108,9 +118,10 @@ def generate_counseling(state: TherapyState) -> TherapyState:
     dua_line = f"\nHere’s a short dua for you to softly recite:\n{state['dua']}" if state.get("dua") else ""
 
     prompt = f"""
-You are Noor, an Islamic therapist. Write a warm and persuasive reply like a real therapist.
+    Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
+You are Mustafa, an Islamic therapist. Write a warm and persuasive reply like a real therapist.
 Blend Seerah, Hadith, Ayah naturally (no references). Use soft, healing, human tone.
-Use some Roman Urdu if the user seems casual. Avoid robotic responses.
+Avoid robotic responses.
 Include this dua in your reply if it exists.
 
 User: {name}
@@ -131,11 +142,11 @@ def generate_casual_reply(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
 
     prompt = f"""
-You are Noor, a friendly and polite AI assistant.
+You are Mustafa, a friendly, casual and islamic psycholgical therapist.
 Respond briefly and casually to the user's message.
 Don't include any religious or therapeutic context.
-Use Roman Urdu if the user message contains Roman Urdu, otherwise reply in English.
-Be friendly, helpful, and casual.
+Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
+Be friendly, helpful, and casual. don't be robotic don't write long paragraphs just a few lines.
 
 User: {name}
 Message: "{user_msg}"
