@@ -81,31 +81,32 @@ def route_based_on_emotion(state: TherapyState) -> str:
 
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
-    user_msg = state["message"]
     prompt = f"""
-User message: "{user_msg}"
-
-Based on this message, detect language — if it's in English or Roman Urdu, respond accordingly.
-
-Then return ONLY a short **authentic** Islamic dua appropriate for someone feeling **{emotion}**, with the following format:
-
-Arabic: [Dua in Arabic WITH full diacritics]
-Translation: [Translation in same language as user message]
-
+Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
+Give a short authentic dua (Arabic with diacritics + translation) for someone feeling {emotion}.
 Rules:
-- Arabic must include full diacritics (Tashkeel).
-- Translation should match user message language (English or Roman Urdu).
-- Only authentic duas from Quran or Sahih Hadith or from seerah or Islamic history or teachings.
-- Do not fabricate or invent supplications.
-- Do NOT explain anything. Just strictly follow this format:
+1. Arabic with full diacritics.
+2. Authentic only — from Quran, Hadith, or Seerah.
+3. No fabricated or generic made-up duas.
+4. Do NOT explain the dua. Just output:
 
 Arabic: ...
 Translation: ...
 """
-    result = model.generate_content(prompt).text.strip()
-    state["dua"] = result
-    logging.info(f"Dua generated: {result}")
-    return state
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip() if response.text else None
+
+        if not text or "Arabic:" not in text or "Translation:" not in text:
+            raise ValueError("Incomplete dua format received")
+
+        state["dua"] = text
+        logging.info(f"Dua generated: {text}")
+        return state
+    except Exception as e:
+        logging.error(f"Failed to fetch dua: {e}")
+        state["dua"] = "Arabic: اللّهُـمَّ أَجِـرْنِي مِنَ النّـارِ\nTranslation: O Allah, save me from the Fire."
+        return state
 
 
 def generate_counseling(state: TherapyState) -> TherapyState:
