@@ -134,6 +134,9 @@ Time: {timestamp}
 {dua_line}
 """
     reply = model.generate_content(prompt).text.strip()
+    if not reply:
+        logging.error("Empty response from model.")
+        reply = "I'm here for you. Please try again later. May Allah help you."
     state["response"] = reply
     logging.info(f"Final reply: {reply}")
     return state
