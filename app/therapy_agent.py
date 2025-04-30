@@ -68,12 +68,16 @@ Detect one emotion from this list:
 Only return the word. If no emotion found, just return "none".
 """
     emotion = model.generate_content(prompt).text.strip().lower()
-    state["emotion"] = emotion if emotion in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"] else None
+    valid_emotions = ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]
+    state["emotion"] = emotion if emotion in valid_emotions else None
     logging.info(f"Detected emotion: {state['emotion']}")
     return state
 
 def route_based_on_emotion(state: TherapyState) -> str:
-    return "emotional" if state.get("emotion") in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless"] else "casual"
+    if state.get("emotion") in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless"]:
+        return "emotional"
+    else:
+        return "casual"
 
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
@@ -122,6 +126,25 @@ Time: {timestamp}
     logging.info(f"Final reply: {reply}")
     return state
 
+def generate_casual_reply(state: TherapyState) -> TherapyState:
+    name = state.get("name", "Friend")
+    user_msg = state["message"]
+
+    prompt = f"""
+You are Noor, a friendly and polite AI assistant.
+Respond briefly and casually to the user's message.
+Don't include any religious or therapeutic context.
+Use Roman Urdu if the user message contains Roman Urdu, otherwise reply in English.
+Be friendly, helpful, and casual.
+
+User: {name}
+Message: "{user_msg}"
+"""
+    reply = model.generate_content(prompt).text.strip()
+    state["response"] = reply
+    logging.info(f"Casual reply: {reply}")
+    return state
+
 # ---- GRAPH BUILD ---- #
 graph = StateGraph(TherapyState)
 
@@ -129,14 +152,19 @@ graph.add_node("handle_memory", set_user_memory)
 graph.add_node("detect_emotion", classify_emotion)
 graph.add_node("get_dua", fetch_dua)
 graph.add_node("generate_reply", generate_counseling)
+graph.add_node("casual_reply", generate_casual_reply)
 
 graph.set_entry_point("handle_memory")
 graph.add_edge("handle_memory", "detect_emotion")
+
 graph.add_conditional_edges("detect_emotion", route_based_on_emotion, {
     "emotional": "get_dua",
-    "casual": "generate_reply"
+    "casual": "casual_reply"
 })
+
 graph.add_edge("get_dua", "generate_reply")
+
 graph.set_finish_point("generate_reply")
+graph.set_finish_point("casual_reply")
 
 langgraph_app = graph.compile()
