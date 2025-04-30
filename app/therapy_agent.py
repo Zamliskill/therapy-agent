@@ -26,7 +26,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise EnvironmentError("GOOGLE_API_KEY is missing in your .env file.")
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+model = genai.GenerativeModel("models/gemini-1.5-pro-latest")
 
 # ---- MEMORY ---- #
 memory = {}
@@ -183,3 +183,6 @@ graph.set_finish_point("generate_reply")
 graph.set_finish_point("casual_reply")
 
 langgraph_app = graph.compile()
+
+
+
