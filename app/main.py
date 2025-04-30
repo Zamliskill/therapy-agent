@@ -1,3 +1,5 @@
+
+# main.py
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -22,8 +24,8 @@ def chat(data: UserMessage):
         content={
             "name": result["name"],
             "emotion": result["emotion"],
-            "dua": result["dua"],
             "message": result["response"]
         },
-        media_type="application/json; charset=utf-8"  # <-- Force UTF-8 here
+        media_type="application/json; charset=utf-8"
     )
+

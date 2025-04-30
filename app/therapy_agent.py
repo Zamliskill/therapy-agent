@@ -8,10 +8,10 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from langgraph.graph import StateGraph
 
-# ---- LOGGING SETUP ---- #
+# ---- LOGGING ---- #
 logging.basicConfig(level=logging.INFO)
 
-# ---- STATE TYPE ---- #
+# ---- STATE ---- #
 class TherapyState(TypedDict, total=False):
     user_id: str
     name: Optional[str]
@@ -20,20 +20,18 @@ class TherapyState(TypedDict, total=False):
     dua: Optional[str]
     response: Optional[str]
 
-# ---- ENV + MODEL CONFIG ---- #
+# ---- ENV ---- #
 load_dotenv()
-
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise EnvironmentError("GOOGLE_API_KEY is missing in your .env file.")
-
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel("models/gemini-1.5-flash")
 
-# ---- MEMORY STATE ---- #
+# ---- MEMORY ---- #
 memory = {}
 
-# ---- DYNAMIC FLAVOR GENERATOR ---- #
+# ---- FLAVOR ---- #
 def generate_prompt_flavor():
     moods = ["gentle", "hopeful", "tender", "comforting", "reassuring", "sincere", "soft-spoken"]
     metaphors = [
@@ -51,118 +49,80 @@ def generate_prompt_flavor():
     ]
     return f"{random.choice(moods).capitalize()} tone, {random.choice(metaphors)}, {random.choice(emotion_frame)}"
 
-# ---- EMOTION DETECTION NODE ---- #
+# ---- NODES ---- #
+
+def set_user_memory(state: TherapyState) -> TherapyState:
+    uid = state["user_id"]
+    memory.setdefault(uid, {})
+    if state.get("name"):
+        memory[uid]["name"] = state["name"]
+    state["name"] = memory[uid].get("name", "Friend")
+    return state
+
 def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
     prompt = f"""
 User message: \"{user_msg}\"
-
-Detect the user's emotion from this list:
-[\"sad\", \"angry\", \"anxious\", \"tired\", \"lonely\", \"guilty\", \"empty\", \"hopeless\", \"happy\"]
-
-User may be speaking in Roman Urdu or English. Return only one word from above that best matches the emotional tone.
-If you can't detect any emotion, return: \"none\".
+Detect one emotion from this list:
+["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]
+Only return the word. If no emotion found, just return "none".
 """
     emotion = model.generate_content(prompt).text.strip().lower()
-    state["emotion"] = emotion
-    logging.info(f"Emotion detected: {emotion}")
+    state["emotion"] = emotion if emotion in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"] else None
+    logging.info(f"Detected emotion: {state['emotion']}")
     return state
 
-# ---- DUA FETCH NODE ---- #
+def route_based_on_emotion(state: TherapyState) -> str:
+    return "emotional" if state.get("emotion") in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless"] else "casual"
+
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
-
-    if emotion == "none":
-        state["dua"] = None
-        return state
-
     prompt = f"""
-Provide a short and authentic Islamic dua with proper diacritics (Arabic + English translation) for someone feeling {emotion}.
-User may speak in Roman Urdu or English return your response according to the language of user mean roman urdu or english
-
+Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
+Give a short authentic dua (Arabic with diacritics + translation) for someone feeling {emotion}.
 Rules:
-- Give a Dua that fits the situation emotionally and spiritually.
-- Arabic with proper diacritics + simple English translation.
-- Keep it short, heartfelt, and authentic.
-- the dua should be authentic for that mood and should be quoted in ayah, hadith or from seerah but should be authentic not generated one.
+1. Arabic with diacritics.
+2. Authentic only — from Quran, Hadith, or Seerah.
+3. No fabricated or generic made-up duas.
+4. Do NOT explain the dua. Just output:
 
-Format:
 Arabic: ...
 Translation: ...
 """
     dua = model.generate_content(prompt).text.strip()
     state["dua"] = dua
-    logging.info(f"Dua provided: {dua}")
+    logging.info(f"Dua generated: {dua}")
     return state
 
-# ---- COUNSELOR RESPONSE NODE ---- #
 def generate_counseling(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
-    emotion = state["emotion"]
+    emotion = state.get("emotion", "neutral")
     user_msg = state["message"]
-
     tone_instruction = generate_prompt_flavor()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    dua_line = f"\nHere’s a short dua for you to softly recite:\n{state['dua']}" if state.get("dua") else ""
+
     prompt = f"""
-You are an Islamic therapist named Mustafa. Your goal is to provide short, heartfelt replies that bring peace and healing.
-User may speak in Roman Urdu or English. Detect the language and respond in the same language.
-
-If emotion is \"none\":
-- Be friendly, casual, and warm like a tea-time chat ☕
-- Respond to greetings and small talk like a caring Muslim friend.
-- For \"how are you\": say Alhamdulillah + return question
-- For \"tell me something\": share short, gentle Hadith or reflection (without references)
-
-If emotion is present:
-- Speak like a caring, grounded soul.
-- Blend Islamic wisdom with soft CBT principles.
-- Avoid robotic phrases (e.g., "I'm sorry to hear").
-- Use Ayahs, Hadith, Seerah only in natural context — no references.
-- Strictly avoid haram coping (music, dating, etc.)
--Always call people towards Allah gently but firmly, reminding them about Akhirah.
-- If they mention haram (e.g., dating, lost girlfriend), remind them Allah protected them.
-- Recommend halal healing: Durood, Tawbah, Dhikr, Names of Allah, Surah Duha/Inshirah or anyother surah for that mood.
-
-Tone: {tone_instruction}
-Limit to max 80 words. Use copywriting principles — make it feel personal, healing.
-Light emoji use allowed if adds warmth 🌿🕊️
+You are Noor, an Islamic therapist. Write a warm and persuasive reply like a real therapist.
+Blend Seerah, Hadith, Ayah naturally (no references). Use soft, healing, human tone.
+Use some Roman Urdu if the user seems casual. Avoid robotic responses.
+Include this dua in your reply if it exists.
 
 User: {name}
 Emotion: {emotion}
 Message: \"{user_msg}\"
+Tone style: {tone_instruction}
 Time: {timestamp}
-"""
 
+{dua_line}
+"""
     reply = model.generate_content(prompt).text.strip()
     state["response"] = reply
-    logging.info(f"Therapist reply: {reply}")
+    logging.info(f"Final reply: {reply}")
     return state
 
-# ---- USER MEMORY NODE ---- #
-def set_user_memory(state: TherapyState) -> TherapyState:
-    uid = state["user_id"]
-
-    if uid in memory:
-        user_name = memory[uid].get("name", "Friend")
-        user_mood = memory[uid].get("mood", "neutral")
-        logging.info(f"Welcome back, {user_name}! Your current mood is {user_mood}.")
-    else:
-        logging.info("New user. Welcome!")
-
-    if "name" in state:
-        memory[uid] = memory.get(uid, {})
-        memory[uid]["name"] = state["name"]
-
-    if "emotion" in state:
-        memory[uid] = memory.get(uid, {})
-        memory[uid]["mood"] = state["emotion"]
-
-    state["name"] = memory[uid].get("name", "Friend")
-    state["emotion"] = memory[uid].get("mood", "neutral")
-    return state
-
-# ---- LANGGRAPH BUILD ---- #
+# ---- GRAPH BUILD ---- #
 graph = StateGraph(TherapyState)
 
 graph.add_node("handle_memory", set_user_memory)
@@ -172,7 +132,10 @@ graph.add_node("generate_reply", generate_counseling)
 
 graph.set_entry_point("handle_memory")
 graph.add_edge("handle_memory", "detect_emotion")
-graph.add_edge("detect_emotion", "get_dua")
+graph.add_conditional_edges("detect_emotion", route_based_on_emotion, {
+    "emotional": "get_dua",
+    "casual": "generate_reply"
+})
 graph.add_edge("get_dua", "generate_reply")
 graph.set_finish_point("generate_reply")
 
