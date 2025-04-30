@@ -85,7 +85,7 @@ def fetch_dua(state: TherapyState) -> TherapyState:
 Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
 Give a short authentic dua (Arabic with diacritics + translation) for someone feeling {emotion}.
 Rules:
-1. Arabic with full diacritics.
+1. Arabic with diacritics.
 2. Authentic only — from Quran, Hadith, or Seerah.
 3. No fabricated or generic made-up duas.
 4. Do NOT explain the dua. Just output:
@@ -93,21 +93,10 @@ Rules:
 Arabic: ...
 Translation: ...
 """
-    try:
-        response = model.generate_content(prompt)
-        text = response.text.strip() if response.text else None
-
-        if not text or "Arabic:" not in text or "Translation:" not in text:
-            raise ValueError("Incomplete dua format received")
-
-        state["dua"] = text
-        logging.info(f"Dua generated: {text}")
-        return state
-    except Exception as e:
-        logging.error(f"Failed to fetch dua: {e}")
-        state["dua"] = "Arabic: اللّهُـمَّ أَجِـرْنِي مِنَ النّـارِ\nTranslation: O Allah, save me from the Fire."
-        return state
-
+    dua = model.generate_content(prompt).text.strip()
+    state["dua"] = dua
+    logging.info(f"Dua generated: {dua}")
+    return state
 
 def generate_counseling(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
@@ -134,9 +123,6 @@ Time: {timestamp}
 {dua_line}
 """
     reply = model.generate_content(prompt).text.strip()
-    if not reply:
-        logging.error("Empty response from model.")
-        reply = "I'm here for you. Please try again later. May Allah help you."
     state["response"] = reply
     logging.info(f"Final reply: {reply}")
     return state
