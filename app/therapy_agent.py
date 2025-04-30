@@ -57,10 +57,11 @@ def classify_emotion(state: TherapyState) -> TherapyState:
     prompt = f"""
 User message: \"{user_msg}\"
 
-Detect emotion from:
-["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]
+Detect the user's emotion from this list:
+[\"sad\", \"angry\", \"anxious\", \"tired\", \"lonely\", \"guilty\", \"empty\", \"hopeless\", \"happy\"]
 
-Just return the one word.
+User may be speaking in Roman Urdu or English. Return only one word from above that best matches the emotional tone.
+If you can't detect any emotion, return: \"none\".
 """
     emotion = model.generate_content(prompt).text.strip().lower()
     state["emotion"] = emotion
@@ -71,18 +72,20 @@ Just return the one word.
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
 
+    if emotion == "none":
+        state["dua"] = None
+        return state
+
     prompt = f"""
 Provide a short and authentic Islamic dua with proper diacritics (Arabic + English translation) for someone feeling {emotion}.
-Keep the dua brief and concise, ensuring the translation is clear and meaningful.
+User may speak in Roman Urdu or English return your response according to the language of user mean roman urdu or english
+
 Rules:
 - Give a Dua that fits the situation emotionally and spiritually.
-- For heartbreak from haram relationship: Dua for loving Allah more.
-- For sadness: Dua for patience and hope.
 - Arabic with proper diacritics + simple English translation.
 - Keep it short, heartfelt, and authentic.
-Here are examples of correct format:
-- For sadness: اللهم إني أعوذ بك من الهم والحزن - O Allah, I seek refuge in You from worry and grief.
-- For anxiety: حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ - Allah is Sufficient for us, and He is the Best Disposer of affairs.
+- the dua should be authentic for that mood and should be quoted in ayah, hadith or from seerah but should be authentic not generated one.
+
 Format:
 Arabic: ...
 Translation: ...
@@ -102,37 +105,35 @@ def generate_counseling(state: TherapyState) -> TherapyState:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     prompt = f"""
-You're an Islamic therapist named Noor. Respond as a compassionate friend blending Islamic wisdom with CBT coping skills.
-Avoid references. Use context from Ayah/Hadith naturally. Make it feel like a warm, real conversation.
-Strict instructions:
-- Never recommend anything Haram (e.g., music, dating, girlfriend/boyfriend, free mixing).
-- Never give false hopes like "she will come back" for haram relationships.
-- Always call people towards Allah gently but firmly, reminding them about Akhirah.
+You are an Islamic therapist named Mustafa. Your goal is to provide short, heartfelt replies that bring peace and healing.
+User may speak in Roman Urdu or English. Detect the language and respond in the same language.
+
+If emotion is \"none\":
+- Be friendly, casual, and warm like a tea-time chat ☕
+- Respond to greetings and small talk like a caring Muslim friend.
+- For \"how are you\": say Alhamdulillah + return question
+- For \"tell me something\": share short, gentle Hadith or reflection (without references)
+
+If emotion is present:
+- Speak like a caring, grounded soul.
+- Blend Islamic wisdom with soft CBT principles.
+- Avoid robotic phrases (e.g., "I'm sorry to hear").
+- Use Ayahs, Hadith, Seerah only in natural context — no references.
+- Strictly avoid haram coping (music, dating, etc.)
+-Always call people towards Allah gently but firmly, reminding them about Akhirah.
 - If they mention haram (e.g., dating, lost girlfriend), remind them Allah protected them.
-- Recommend halal coping: Listening to Names of Allah, Surah Duha, Surah Inshirah, making Durood, Istighfar, Tawbah, Sabr, Dhikr.
-- Make them feel hopeful about Allah’s Mercy.
-- Be extremely gentle, comforting, but truthful.
+- Recommend halal healing: Durood, Tawbah, Dhikr, Names of Allah, Surah Duha/Inshirah or anyother surah for that mood.
+
+Tone: {tone_instruction}
+Limit to max 80 words. Use copywriting principles — make it feel personal, healing.
+Light emoji use allowed if adds warmth 🌿🕊️
 
 User: {name}
 Emotion: {emotion}
 Message: \"{user_msg}\"
-Tone: {tone_instruction}
 Time: {timestamp}
-
-Guide for emotional response:
-- Sad: Remind them that after hardship comes ease. Comfort them like light returns after darkness.
-- Anxious: Encourage them to trust Allah’s plan. Help them ground in present.
-- Lonely: Remind them Allah is closer than they think. They're never truly alone.
-- Angry: Encourage calm, reframing, forgiveness. Point to the power in restraint.
-- Others: Respond softly with emotional safety and spiritual insight according to that mood.
-Additional Rules:
-- If they feel lonely: Tell them Allah is with them; suggest Dhikr and Surah Duha.
-- If they feel heartbroken: Tell them Allah is mending their heart for better.
-- If they admit sin: Praise them for realizing it, and encourage repentance without harshness.
-- For sadness: Remind "Verily, with hardship comes ease"
-
-Keep it short, empathetic, and human.
 """
+
     reply = model.generate_content(prompt).text.strip()
     state["response"] = reply
     logging.info(f"Therapist reply: {reply}")
@@ -160,10 +161,6 @@ def set_user_memory(state: TherapyState) -> TherapyState:
     state["name"] = memory[uid].get("name", "Friend")
     state["emotion"] = memory[uid].get("mood", "neutral")
     return state
-
-# ---- ROUTER & FLOW ---- #
-def route_followup(state: TherapyState) -> str:
-    return "followup" if state.get("is_followup") else "new_session"
 
 # ---- LANGGRAPH BUILD ---- #
 graph = StateGraph(TherapyState)
