@@ -26,7 +26,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise EnvironmentError("GOOGLE_API_KEY is missing in your .env file.")
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+model = genai.GenerativeModel("models/gemini-1.5-pro-latest")
 
 # ---- MEMORY ---- #
 memory = {}
@@ -59,6 +59,20 @@ def set_user_memory(state: TherapyState) -> TherapyState:
     state["name"] = memory[uid].get("name", "Friend")
     return state
 
+def detect_identity_query(state: TherapyState) -> Optional[str]:
+    message = state["message"].lower()
+    identity_keywords = [
+        "who are you", "who built you", "who is your owner",
+        "what can you do", "what's your purpose", "created you", "developer"
+    ]
+    if any(kw in message for kw in identity_keywords):
+        state["response"] = (
+            "I am Mustafa, an Islamic therapist, developed by Syed Mozamil Shah, Founder of DigiPuma. "
+            "I provide mood-based counseling rooted in Islamic teachings to help you find peace and joy through faith."
+        )
+        return "identity"
+    return None
+
 def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
     prompt = f"""
@@ -74,7 +88,7 @@ Only return the word. If no emotion found, just return "none".
     return state
 
 def route_based_on_emotion(state: TherapyState) -> str:
-    if state.get("emotion") in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless"]:
+    if state.get("emotion") in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]:
         return "emotional"
     else:
         return "casual"
@@ -85,10 +99,11 @@ def fetch_dua(state: TherapyState) -> TherapyState:
 Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
 Give a short authentic dua (Arabic with diacritics + translation) for someone feeling {emotion}.
 Rules:
-1. Arabic with full diacritics.
-2. Authentic only — from Quran, Hadith, or Seerah.
-3. No fabricated or generic made-up duas.
-4. Do NOT explain the dua. Just output:
+1. Use only authentic duas from Quran, Hadith, Seerah, Islamic history or teachings etc.
+2. If no specific dua exists for that emotion, use a general comforting dua.
+3. Avoid long duas; keep it short and easy to remember.
+If there is no specific authentic dua for that emotion, choose a general comforting authentic dua that fits the mood.
+Do not skip. Always respond in this format:
 
 Arabic: ...
 Translation: ...
@@ -105,9 +120,9 @@ Translation: ...
         return state
     except Exception as e:
         logging.error(f"Failed to fetch dua: {e}")
-        state["dua"] = "Arabic: اللّهُـمَّ أَجِـرْنِي مِنَ النّـارِ\nTranslation: O Allah, save me from the Fire."
+        fallback = "Arabic: اللَّهُمَّ آتِ نَفْسِي تَقْوَاهَا، وَزَكِّهَا أَنْتَ خَيْرُ مَنْ زَكَّاهَا، أَنْتَ وَلِيُّهَا وَمَوْلَاهَا\nO Allah, grant my soul its piety and purify it, for You are the best to purify it. You are its Guardian and Protector."
+        state["dua"] = fallback
         return state
-
 
 def generate_counseling(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
@@ -119,9 +134,11 @@ def generate_counseling(state: TherapyState) -> TherapyState:
     dua_line = f"\nHere’s a short dua for you to softly recite:\n{state['dua']}" if state.get("dua") else ""
 
     prompt = f"""
-    Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
+Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
 You are Mustafa, an Islamic therapist. Write a warm and persuasive reply like a real therapist.
-Blend Seerah, Hadith, Ayah naturally (no references). Use soft, healing, human tone.
+Blend Seerah, Hadith, Ayah, islamic history naturally (no references). Use soft, healing, human tone.
+the response should make the user feel better and more connected to Allah.
+don't recommend any haram or unislamic things and for haram things like haram realatonships, music etc tell the azaab for it and it's consequences etc
 Avoid robotic responses.
 Include this dua in your reply if it exists.
 
@@ -146,11 +163,11 @@ def generate_casual_reply(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
 
     prompt = f"""
-You are Mustafa, a friendly, casual and islamic psycholgical therapist.
+You are Mustafa, a friendly, casual and Islamic psychological therapist.
 Respond briefly and casually to the user's message.
 Don't include any religious or therapeutic context.
 Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
-Be friendly, helpful, and casual. don't be robotic don't write long paragraphs just a few lines.
+Be friendly, helpful, and casual. Don't be robotic. Don't write long paragraphs—just a few lines.
 
 User: {name}
 Message: "{user_msg}"
@@ -164,13 +181,19 @@ Message: "{user_msg}"
 graph = StateGraph(TherapyState)
 
 graph.add_node("handle_memory", set_user_memory)
+graph.add_node("check_identity", detect_identity_query)
 graph.add_node("detect_emotion", classify_emotion)
 graph.add_node("get_dua", fetch_dua)
 graph.add_node("generate_reply", generate_counseling)
 graph.add_node("casual_reply", generate_casual_reply)
 
 graph.set_entry_point("handle_memory")
-graph.add_edge("handle_memory", "detect_emotion")
+graph.add_edge("handle_memory", "check_identity")
+
+graph.add_conditional_edges("check_identity", lambda s: s.get("response") and "identity" or "continue", {
+    "identity": graph.END,
+    "continue": "detect_emotion"
+})
 
 graph.add_conditional_edges("detect_emotion", route_based_on_emotion, {
     "emotional": "get_dua",
@@ -183,6 +206,3 @@ graph.set_finish_point("generate_reply")
 graph.set_finish_point("casual_reply")
 
 langgraph_app = graph.compile()
-
-
-
