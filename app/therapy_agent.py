@@ -59,7 +59,8 @@ def set_user_memory(state: TherapyState) -> TherapyState:
     state["name"] = memory[uid].get("name", "Friend")
     return state
 
-def detect_identity_query(state: TherapyState) -> Optional[str]:
+# -- FIXED identity check --
+def detect_identity_query(state: TherapyState) -> TherapyState:
     message = state["message"].lower()
     identity_keywords = [
         "who are you", "who built you", "who is your owner",
@@ -70,8 +71,11 @@ def detect_identity_query(state: TherapyState) -> Optional[str]:
             "I am Mustafa, an Islamic therapist, developed by Syed Mozamil Shah, Founder of DigiPuma. "
             "I provide mood-based counseling rooted in Islamic teachings to help you find peace and joy through faith."
         )
-        return "identity"
-    return None
+        state["identity_query"] = True  # <- add flag to route on
+    else:
+        state["identity_query"] = False
+    return state
+
 
 def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
@@ -159,7 +163,8 @@ Time: {timestamp}
         logging.info(f"Final reply: {reply}")
         return state
     except google.api_core.exceptions.ResourceExhausted:
-        return "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment"
+        state["response"] = "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment."
+        return state
 
 def generate_casual_reply(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
@@ -181,8 +186,9 @@ Message: "{user_msg}"
         logging.info(f"Casual reply: {reply}")
         return state
     except google.api_core.exceptions.ResourceExhausted:
-        return "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment"
-    
+        state["response"] = "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment."
+        return state
+
 # ---- GRAPH BUILD ---- #
 graph = StateGraph(TherapyState)
 
@@ -196,7 +202,7 @@ graph.add_node("casual_reply", generate_casual_reply)
 graph.set_entry_point("handle_memory")
 graph.add_edge("handle_memory", "check_identity")
 
-graph.add_conditional_edges("check_identity", lambda s: "identity" if s.get("response") else "continue", {
+graph.add_conditional_edges("check_identity", lambda s: "identity" if s.get("identity_query") else "continue", {
     "identity": "__end__",
     "continue": "detect_emotion"
 })
