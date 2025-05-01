@@ -190,10 +190,11 @@ graph.add_node("casual_reply", generate_casual_reply)
 graph.set_entry_point("handle_memory")
 graph.add_edge("handle_memory", "check_identity")
 
-graph.add_conditional_edges("check_identity", lambda s: s.get("response") and "identity" or "continue", {
-    "identity": graph.END,
+graph.add_conditional_edges("check_identity", lambda s: "identity" if s.get("response") else "continue", {
+    "identity": "__end__",
     "continue": "detect_emotion"
 })
+
 
 graph.add_conditional_edges("detect_emotion", route_based_on_emotion, {
     "emotional": "get_dua",
