@@ -3,11 +3,11 @@ import logging
 import random
 from datetime import datetime
 from typing import TypedDict, Optional
-
+import google.api_core.exceptions
 from dotenv import load_dotenv
 import google.generativeai as genai
 from langgraph.graph import StateGraph
-
+    
 # ---- LOGGING ---- #
 logging.basicConfig(level=logging.INFO)
 
@@ -132,7 +132,7 @@ def generate_counseling(state: TherapyState) -> TherapyState:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     dua_line = f"\nHere’s a short dua for you to softly recite:\n{state['dua']}" if state.get("dua") else ""
-
+       
     prompt = f"""
 Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
 You are Mustafa, an Islamic therapist. Write a warm and persuasive reply like a real therapist.
@@ -150,13 +150,16 @@ Time: {timestamp}
 
 {dua_line}
 """
-    reply = model.generate_content(prompt).text.strip()
-    if not reply:
-        logging.error("Empty response from model.")
-        reply = "I'm here for you. Please try again later. May Allah help you."
-    state["response"] = reply
-    logging.info(f"Final reply: {reply}")
-    return state
+    try:
+        reply = model.generate_content(prompt).text.strip()
+        if not reply:
+            logging.error("Empty response from model.")
+            reply = "I'm here for you. Please try again later. May Allah help you."
+        state["response"] = reply
+        logging.info(f"Final reply: {reply}")
+        return state
+    except google.api_core.exceptions.ResourceExhausted:
+        return "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment"
 
 def generate_casual_reply(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
@@ -172,11 +175,14 @@ Be friendly, helpful, and casual. Don't be robotic. Don't write long paragraphs�
 User: {name}
 Message: "{user_msg}"
 """
-    reply = model.generate_content(prompt).text.strip()
-    state["response"] = reply
-    logging.info(f"Casual reply: {reply}")
-    return state
-
+    try:
+        reply = model.generate_content(prompt).text.strip()
+        state["response"] = reply
+        logging.info(f"Casual reply: {reply}")
+        return state
+    except google.api_core.exceptions.ResourceExhausted:
+        return "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment"
+    
 # ---- GRAPH BUILD ---- #
 graph = StateGraph(TherapyState)
 
