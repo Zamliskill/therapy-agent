@@ -7,7 +7,7 @@ import google.api_core.exceptions
 from dotenv import load_dotenv
 import google.generativeai as genai
 from langgraph.graph import StateGraph
-    
+
 # ---- LOGGING ---- #
 logging.basicConfig(level=logging.INFO)
 
@@ -59,24 +59,6 @@ def set_user_memory(state: TherapyState) -> TherapyState:
     state["name"] = memory[uid].get("name", "Friend")
     return state
 
-# -- FIXED identity check --
-def detect_identity_query(state: TherapyState) -> TherapyState:
-    message = state["message"].lower()
-    identity_keywords = [
-        "who are you", "who built you", "who is your owner",
-        "what can you do", "what's your purpose", "created you", "developer"
-    ]
-    if any(kw in message for kw in identity_keywords):
-        state["response"] = (
-            "I am Mustafa, an Islamic therapist, developed by Syed Mozamil Shah, Founder of DigiPuma. "
-            "I provide mood-based counseling rooted in Islamic teachings to help you find peace and joy through faith."
-        )
-        state["identity_query"] = True  # <- add flag to route on
-    else:
-        state["identity_query"] = False
-    return state
-
-
 def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
     prompt = f"""
@@ -124,7 +106,7 @@ Translation: ...
         return state
     except Exception as e:
         logging.error(f"Failed to fetch dua: {e}")
-        fallback = "Arabic: اللَّهُمَّ آتِ نَفْسِي تَقْوَاهَا، وَزَكِّهَا أَنْتَ خَيْرُ مَنْ زَكَّاهَا، أَنْتَ وَلِيُّهَا وَمَوْلَاهَا\nO Allah, grant my soul its piety and purify it, for You are the best to purify it. You are its Guardian and Protector."
+        fallback = "Arabic: اللَّهُمَّ آتِ نَفْسِي تَقْوَاهَا، وَزَكِّهَا أَنْتَ خَيْرُ مَنْ زَكَّاهَا، أَنْتَ وَلِيُّهَا وَمَوْلَاهَا\nTranslation: O Allah, grant my soul its piety and purify it, for You are the best to purify it. You are its Guardian and Protector."
         state["dua"] = fallback
         return state
 
@@ -141,8 +123,8 @@ def generate_counseling(state: TherapyState) -> TherapyState:
 Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
 You are Mustafa, an Islamic therapist. Write a warm and persuasive reply like a real therapist.
 Blend Seerah, Hadith, Ayah, islamic history naturally (no references). Use soft, healing, human tone.
-the response should make the user feel better and more connected to Allah.
-don't recommend any haram or unislamic things and for haram things like haram realatonships, music etc tell the azaab for it and it's consequences etc
+The response should make the user feel better and more connected to Allah.
+Don't recommend any haram or unislamic things, and for haram things like haram relationships, music etc, tell the azaab for it and its consequences.
 Avoid robotic responses.
 Include this dua in your reply if it exists.
 
@@ -171,15 +153,21 @@ def generate_casual_reply(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
 
     prompt = f"""
-You are Mustafa, a friendly, casual and Islamic psychological therapist.
-Respond briefly and casually to the user's message.
-Don't include any religious or therapeutic context.
+You are Mustafa, a friendly Islamic psychological therapist created by Syed Mozamil Shah, Founder of DigiPuma.
+If the user asks who you are, who made you, what you can do, what is your name, or similar identity-related questions,
+respond with something like this:
+
+"I am Mustafa, an Islamic Therapist developed by Syed Mozamil Shah, Founder of DigiPuma. I'm here to offer mood-based Islamic counseling, using gentle advice inspired by the Quran, Sunnah, and the Seerah of our Prophet ﷺ. Whether you're feeling low or just need someone to talk to, I'm here for you."
+
+Otherwise, respond briefly and casually to the user's message. Avoid long paragraphs—just a few friendly, helpful lines.
+Do **not** include religious or therapeutic content unless the question is about you or your purpose.
+
 Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
-Be friendly, helpful, and casual. Don't be robotic. Don't write long paragraphs—just a few lines.
 
 User: {name}
 Message: "{user_msg}"
 """
+
     try:
         reply = model.generate_content(prompt).text.strip()
         state["response"] = reply
@@ -193,20 +181,13 @@ Message: "{user_msg}"
 graph = StateGraph(TherapyState)
 
 graph.add_node("handle_memory", set_user_memory)
-graph.add_node("check_identity", detect_identity_query)
 graph.add_node("detect_emotion", classify_emotion)
 graph.add_node("get_dua", fetch_dua)
 graph.add_node("generate_reply", generate_counseling)
 graph.add_node("casual_reply", generate_casual_reply)
 
 graph.set_entry_point("handle_memory")
-graph.add_edge("handle_memory", "check_identity")
-
-graph.add_conditional_edges("check_identity", lambda s: "identity" if s.get("identity_query") else "continue", {
-    "identity": "__end__",
-    "continue": "detect_emotion"
-})
-
+graph.add_edge("handle_memory", "detect_emotion")
 
 graph.add_conditional_edges("detect_emotion", route_based_on_emotion, {
     "emotional": "get_dua",
