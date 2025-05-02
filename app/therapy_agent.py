@@ -63,10 +63,22 @@ def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
     prompt = f"""
 User message: \"{user_msg}\"
-Detect one emotion from this list:
+
+Your task is to detect the user's **current emotional state**, not what they want or wish for.
+
+🔴 Do NOT assume the user is happy just because they mention peace, love, or joy.
+Example:
+- "I want to be happy" = sad
+- "Me be chain hon" = anxious or tired
+- "Kaash sukoon milay" = hopeless
+- "I am finally at peace" = happy
+
+Detect one **actual current emotion** the user is feeling from this list:
 ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]
-Only return the word. If no emotion found, just return "none".
+
+Respond with only the emotion word. If it’s unclear or doesn't match or exist, return "none".
 """
+
     emotion = model.generate_content(prompt).text.strip().lower()
     valid_emotions = ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]
     state["emotion"] = emotion if emotion in valid_emotions else None
@@ -121,12 +133,18 @@ def generate_counseling(state: TherapyState) -> TherapyState:
        
     prompt = f"""
 Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
-You are Mustafa, an Islamic therapist. Write a warm and persuasive reply like a real therapist.
+You are Mustafa, an Islamic therapist. Write a warm, persuasive, and structured reply like a real therapist.
+To improve readability:
+- Break your message into short paragraphs.
+- Use **bullet points**, dashes, or numbered steps where helpful.
+- Emphasize important lines using all caps or bold (if Roman Urdu, use caps).
+- Avoid long blocks of text—keep each section focused and skimmable.
+
 Blend Seerah, Hadith, Ayah, islamic history naturally (no references). Use soft, healing, human tone.
 The response should make the user feel better and more connected to Allah.
 Don't recommend any haram or unislamic things, and for haram things like haram relationships, music etc, tell the azaab for it and its consequences.
 Avoid robotic responses.
-Include this dua in your reply if it exists.
+Include this dua in your reply if it exists by saying like here is dua for you or recite this dua, say according to struction and condition.
 
 User: {name}
 Emotion: {emotion}
