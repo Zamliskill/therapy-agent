@@ -3,7 +3,6 @@ import logging
 import random
 from datetime import datetime
 from typing import TypedDict, Optional
-import google.api_core.exceptions
 from dotenv import load_dotenv
 import google.generativeai as genai
 from langgraph.graph import StateGraph
@@ -26,7 +25,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise EnvironmentError("GOOGLE_API_KEY is missing in your .env file.")
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel("models/gemini-1.5-pro-latest")
+model = genai.GenerativeModel("models/gemini-1.5-flash")
 
 # ---- MEMORY ---- #
 memory = {}
@@ -50,7 +49,6 @@ def generate_prompt_flavor():
     return f"{random.choice(moods).capitalize()} tone, {random.choice(metaphors)}, {random.choice(emotion_frame)}"
 
 # ---- NODES ---- #
-
 def set_user_memory(state: TherapyState) -> TherapyState:
     uid = state["user_id"]
     memory.setdefault(uid, {})
@@ -61,66 +59,55 @@ def set_user_memory(state: TherapyState) -> TherapyState:
 
 def classify_emotion(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
-    prompt = f"""
-User message: \"{user_msg}\"
+    prompt = f'''
+User message: "{user_msg}"
 
-Your task is to detect the user's **current emotional state**, not what they want or wish for.
+Your task is to identify the user's **current emotional state**.
+Respond in **just one word**, like: "horny", "ashamed", "overwhelmed", "peaceful", "hopeful", "sad", "happy","anxious"etc.
+If unclear, respond with: "uncertain"
+'''
+    try:
+        response = model.generate_content(prompt)
+        emotion = response.text.strip().lower()
+        if not emotion or len(emotion.split()) > 3:
+            raise ValueError("Invalid emotion response")
+        state["emotion"] = emotion if emotion != "uncertain" else None
+    except Exception as e:
+        logging.error(f"Emotion detection failed: {e}")
+        state["emotion"] = None
 
-🔴 Do NOT assume the user is happy just because they mention peace, love, or joy.
-Example:
-- "I want to be happy" = sad
-- "Me be chain hon" = anxious or tired
-- "Kaash sukoon milay" = hopeless
-- "I am finally at peace" = happy
-
-Detect one **actual current emotion** the user is feeling from this list:
-["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]
-
-Respond with only the emotion word. If it’s unclear or doesn't match or exist, return "none".
-"""
-
-    emotion = model.generate_content(prompt).text.strip().lower()
-    valid_emotions = ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]
-    state["emotion"] = emotion if emotion in valid_emotions else None
     logging.info(f"Detected emotion: {state['emotion']}")
     return state
 
 def route_based_on_emotion(state: TherapyState) -> str:
-    if state.get("emotion") in ["sad", "angry", "anxious", "tired", "lonely", "guilty", "empty", "hopeless", "happy"]:
-        return "emotional"
-    else:
-        return "casual"
+    return "emotional" if state.get("emotion") else "casual"
 
 def fetch_dua(state: TherapyState) -> TherapyState:
     emotion = state["emotion"]
-    prompt = f"""
-Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
-Give a short authentic dua with full Arabic diacritics (harakaat) and its translation. Do not use Roman Urdu in the Arabic line. Only use proper Arabic script for someone feeling {emotion}.
-Rules:
-1. Use only authentic duas from Quran, Hadith, Seerah, Islamic history or teachings etc.
-2. If no specific dua exists for that emotion, use a general comforting dua.
-3. Avoid long duas; keep it short and easy to remember.
-If there is no specific authentic dua for that emotion, choose a general comforting authentic dua that fits the mood.
-Do not skip. Always respond in this format:
+    prompt = f'''
+Give a short authentic dua with Arabic diacritics (harakaat) and translation.
+For the emotion: {emotion}
 
+Rules:
+- Use only authentic duas from Quran, Hadith, Seerah.
+- Search for short duas.
+- If no specific dua exists for this emotion, use a general comforting one but that should be authentic too.
+
+Format:
 Arabic: ...
 Translation: ...
-"""
+'''
     try:
         response = model.generate_content(prompt)
-        text = response.text.strip() if response.text else None
-
-        if not text or "Arabic:" not in text or "Translation:" not in text:
-            raise ValueError("Incomplete dua format received")
-
+        text = response.text.strip()
+        if "Arabic:" not in text or "Translation:" not in text:
+            raise ValueError("Incomplete format")
         state["dua"] = text
-        logging.info(f"Dua generated: {text}")
-        return state
     except Exception as e:
-        logging.error(f"Failed to fetch dua: {e}")
-        fallback = "Arabic: اللَّهُمَّ آتِ نَفْسِي تَقْوَاهَا، وَزَكِّهَا أَنْتَ خَيْرُ مَنْ زَكَّاهَا، أَنْتَ وَلِيُّهَا وَمَوْلَاهَا\nTranslation: O Allah, grant my soul its piety and purify it, for You are the best to purify it. You are its Guardian and Protector."
+        logging.error(f"Dua generation failed: {e}")
+        fallback = "Arabic: اللَّهُمَّ آتِ نَفْسِي تَقْوَاهَا، وَزَكِّهَا أَنْتَ خَيْرُ مَنْ زَكَّاهَا، أَنْتَ وَلِيُّهَا وَمَوْلَاهَا\nTranslation: O Allah, grant my soul its piety and purify it. You are the best to purify it. You are its Guardian and Protector."
         state["dua"] = fallback
-        return state
+    return state
 
 def generate_counseling(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
@@ -128,52 +115,53 @@ def generate_counseling(state: TherapyState) -> TherapyState:
     user_msg = state["message"]
     tone_instruction = generate_prompt_flavor()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     dua_line = f"\nHere’s a short dua for you to softly recite:\n{state['dua']}" if state.get("dua") else ""
-       
+
     prompt = f"""
-Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
-You are Mustafa, an Islamic therapist. Write a warm, persuasive, and structured reply like a real therapist.
-To improve readability:
-- Break your message into short paragraphs.
-- Use bullet points (`-`) or numbered steps (1. 2. 3.) for clarity where helpful.
-- Use all CAPS to show emphasis emphasis. Avoid asterisks.
-- In Roman Urdu, use UPPERCASE for emphasis instead of bold.
-- Emphasize important lines using all caps.
-- Avoid long blocks of text—keep each section focused and skimmable.
-- Don't say I am Mustafa or your intro in response until the user asks about you.
+    Detect user message language: if English, respond in English; if Roman Urdu, use Roman Urdu.
+    You are Mustafa, an Islamic therapist. Write a warm, persuasive, and structured reply like a real therapist.
+    To improve readability:
+        - Break your message into short paragraphs.
+        - Use bullet points (`-`) or numbered steps (1. 2. 3.) for clarity where helpful.
+        - Use all CAPS to show emphasis emphasis. Avoid asterisks.
+        - In Roman Urdu, use UPPERCASE for emphasis instead of bold.
+        - Emphasize important lines using all caps.
+        - Avoid long blocks of text—keep each section focused and skimmable.
+        - Don't say I am Mustafa or your intro in response until the user asks about you.
 
-Blend Seerah, Hadith, Ayah, islamic history naturally (no references). Use soft, healing, human tone.
-The response should make the user feel better and more connected to Allah.
-Don't recommend any haram or unislamic things, and for haram things like haram relationships, music etc, tell the azaab for it and its consequences.
-Avoid robotic responses.
-Include this dua in your reply if it exists with proper arabic script, diatrics (harkaat) by saying like here is dua for you or recite this dua, say according to struction and condition.
+    Things to Remember:
+        - Use a warm, gentle, and soft tone.
+        - Blend Seerah of Prophets, Hadith, Ayah, islamic history naturally (no references). Use soft, healing, human tone.
+        - The response should make the user feel better and more connected to Allah.
+        - Don't recommend any haram or unislamic things, and for haram things like haram relationships, music etc, tell the azaab for it and its consequences.
+        - Avoid robotic responses.
+        - Include this dua in your reply if it exists with proper arabic script, diatrics (harkaat) by saying like here is dua for you or recite this dua, say according to struction and condition.
 
-User: {name}
-Emotion: {emotion}
-Message: \"{user_msg}\"
-Tone style: {tone_instruction}
-Time: {timestamp}
+    User: {name}
+    Emotion: {emotion}
+    Message: \"{user_msg}\"
+    Tone style: {tone_instruction}
+    Time: {timestamp}
 
-{dua_line}
-"""
+    {dua_line}
+    """
+
+
     try:
-        reply = model.generate_content(prompt).text.strip()
+        response = model.generate_content(prompt)
+        reply = response.text.strip()
         if not reply:
-            logging.error("Empty response from model.")
-            reply = "I'm here for you. Please try again later. May Allah help you."
+            raise ValueError("Empty reply")
         state["response"] = reply
-        logging.info(f"Final reply: {reply}")
-        return state
-    except google.api_core.exceptions.ResourceExhausted:
-        state["response"] = "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment."
-        return state
+    except Exception as e:
+        logging.error(f"Therapist reply failed: {e}")
+        state["response"] = "I'm here for you. Please try again later. May Allah help you."
+    return state
 
 def generate_casual_reply(state: TherapyState) -> TherapyState:
     name = state.get("name", "Friend")
     user_msg = state["message"]
-
-    prompt = f"""
+    prompt = f'''
 You are Mustafa, a friendly Islamic psychological therapist created by Syed Mozamil Shah, Founder of DigiPuma.
 If the user asks who you are, who made you, what you can do, what is your name, or similar identity-related questions,
 respond with something like this:
@@ -187,16 +175,15 @@ Detect user message language: if English, respond in English; if Roman Urdu, use
 
 User: {name}
 Message: "{user_msg}"
-"""
+'''
 
     try:
-        reply = model.generate_content(prompt).text.strip()
-        state["response"] = reply
-        logging.info(f"Casual reply: {reply}")
-        return state
-    except google.api_core.exceptions.ResourceExhausted:
-        state["response"] = "I'm currently experiencing high load. Please try again shortly, inshaAllah. You're not alone — Allah is with you in every moment."
-        return state
+        response = model.generate_content(prompt)
+        state["response"] = response.text.strip()
+    except Exception as e:
+        logging.error(f"Casual reply failed: {e}")
+        state["response"] = "I'm currently overloaded. Please try again soon. Allah is with you."
+    return state
 
 # ---- GRAPH BUILD ---- #
 graph = StateGraph(TherapyState)
